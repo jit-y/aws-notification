@@ -11,21 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
-type service struct {
-	title   string
-	billing int
-}
-
 func handler(ctx context.Context) (string, error) {
-	endpoint := os.Getenv("CW_END_POINT")
-	region := os.Getenv("CW_REGION")
-
-	cfg := aws.Config{
-		Endpoint: &endpoint,
-		Region:   &region,
-	}
+	cfg := buildAWSConfig()
 	s := session.New()
-	cw := cloudwatch.New(s, &cfg)
+	cw := cloudwatch.New(s, cfg)
 
 	jst := time.FixedZone("Asia/Tokyo", 9*60*60)
 	now := time.Now().UTC().In(jst)
@@ -39,8 +28,6 @@ func handler(ctx context.Context) (string, error) {
 	currency := cloudwatch.Dimension{}
 	currency.SetName("Currency")
 	currency.SetValue("USD")
-	currency.SetName("ServiceName")
-	currency.SetValue("AmazonEC2")
 	dimensions := []*cloudwatch.Dimension{
 		&currency,
 	}
@@ -68,4 +55,14 @@ func handler(ctx context.Context) (string, error) {
 
 func main() {
 	lambda.Start(handler)
+}
+
+func buildAWSConfig() *aws.Config {
+	endpoint := os.Getenv("CW_ENDPOINT")
+	region := os.Getenv("CW_REGION")
+
+	return &aws.Config{
+		Endpoint: &endpoint,
+		Region:   &region,
+	}
 }
