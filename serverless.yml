@@ -11,7 +11,7 @@
 #
 # Happy Coding!
 
-service: aws-go-mod # NOTE: update this with your service name
+service: aws-notification
 
 # You can pin your service to only deploy with a specific Serverless version
 # Check out our docs for more details
@@ -21,6 +21,16 @@ frameworkVersion: ">=1.28.0 <2.0.0"
 provider:
   name: aws
   runtime: go1.x
+  region: ap-northeast-1
+  profile: serverless
+  environment:
+    CW_END_POINT: https://monitoring.ap-northeast-1.amazonaws.com
+    CW_REGION: ap-northeast-1
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+      - "cloudwatch:GetMetricStatistics"
+      Resource: "*"
 
 # you can overwrite defaults here
 #  stage: dev
@@ -50,21 +60,13 @@ package:
  exclude:
    - ./**
  include:
-   - ./bin/**
+   - ./release/bin/**
 
 functions:
-  hello:
-    handler: bin/hello
+  notify_to_slack:
+    handler: release/bin/billing
     events:
-      - http:
-          path: hello
-          method: get
-  world:
-    handler: bin/world
-    events:
-      - http:
-          path: world
-          method: get
+    - schedule: cron(0 10 * * ? *)
 
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events
