@@ -1,3 +1,5 @@
 /vendor/
 /release/bin/
 /.serverless/
+/secret/*
+!/secret/.gitkeep
