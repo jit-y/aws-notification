@@ -11,6 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
+func main() {
+	lambda.Start(handler)
+}
+
 func handler(ctx context.Context) (string, error) {
 	cfg := buildAWSConfig()
 	s := session.New()
@@ -25,11 +29,8 @@ func handler(ctx context.Context) (string, error) {
 	startTime := time.Date(year, month, day-1, 0, 0, 0, 0, jst)
 	endTime := time.Date(year, month, day-1, 23, 59, 59, 0, jst)
 
-	currency := cloudwatch.Dimension{}
-	currency.SetName("Currency")
-	currency.SetValue("USD")
 	dimensions := []*cloudwatch.Dimension{
-		&currency,
+		buildDimension("Currency", "USD"),
 	}
 	avg := "Average"
 	statistics := []*string{
@@ -53,10 +54,6 @@ func handler(ctx context.Context) (string, error) {
 	return output.GoString(), err
 }
 
-func main() {
-	lambda.Start(handler)
-}
-
 func buildAWSConfig() *aws.Config {
 	endpoint := os.Getenv("CW_ENDPOINT")
 	region := os.Getenv("CW_REGION")
@@ -65,4 +62,12 @@ func buildAWSConfig() *aws.Config {
 		Endpoint: &endpoint,
 		Region:   &region,
 	}
+}
+
+func buildDimension(name, value string) *cloudwatch.Dimension {
+	dimension := cloudwatch.Dimension{}
+	dimension.SetName(name)
+	dimension.SetValue(value)
+
+	return &dimension
 }
