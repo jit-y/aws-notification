@@ -32,10 +32,7 @@ func handler(ctx context.Context) (string, error) {
 	dimensions := []*cloudwatch.Dimension{
 		buildDimension("Currency", "USD"),
 	}
-	avg := "Average"
-	statistics := []*string{
-		&avg,
-	}
+	statistics := buildStatistics("Average")
 
 	input := cloudwatch.GetMetricStatisticsInput{}
 	input.SetDimensions(dimensions)
@@ -70,4 +67,13 @@ func buildDimension(name, value string) *cloudwatch.Dimension {
 	dimension.SetValue(value)
 
 	return &dimension
+}
+
+func buildStatistics(statics ...string) []*string {
+	arr := make([]*string, len(statics))
+	for _, v := range statics {
+		arr = append(arr, &v)
+	}
+
+	return arr
 }
