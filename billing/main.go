@@ -69,9 +69,9 @@ func buildDimension(name, value string) *cloudwatch.Dimension {
 	return &dimension
 }
 
-func buildStatistics(statics ...string) []*string {
-	arr := make([]*string, len(statics))
-	for _, v := range statics {
+func buildStatistics(statistics ...string) []*string {
+	arr := make([]*string, len(statistics))
+	for _, v := range statistics {
 		arr = append(arr, &v)
 	}
 
