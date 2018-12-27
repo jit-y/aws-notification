@@ -11,6 +11,38 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
+type timeWithZone struct {
+	tzone *time.Location
+}
+
+func newTimeWithZone() *timeWithZone {
+	t := timeWithZone{
+		tzone: time.FixedZone("Asia/Tokyo", 9*60*60),
+	}
+
+	return &t
+}
+
+func (t *timeWithZone) beginningOfDay() time.Time {
+	now := time.Now().UTC().In(t.tzone)
+
+	year := now.Year()
+	month := now.Month()
+	day := now.Day()
+
+	return time.Date(year, month, day-1, 0, 0, 0, 0, t.tzone)
+}
+
+func (t *timeWithZone) endOfDay() time.Time {
+	now := time.Now().UTC().In(t.tzone)
+
+	year := now.Year()
+	month := now.Month()
+	day := now.Day()
+
+	return time.Date(year, month, day-1, 23, 59, 59, 59, t.tzone)
+}
+
 func main() {
 	lambda.Start(handler)
 }
@@ -20,14 +52,9 @@ func handler(ctx context.Context) (string, error) {
 	s := session.New()
 	cw := cloudwatch.New(s, cfg)
 
-	jst := time.FixedZone("Asia/Tokyo", 9*60*60)
-	now := time.Now().UTC().In(jst)
-
-	year := now.Year()
-	month := now.Month()
-	day := now.Day()
-	startTime := time.Date(year, month, day-1, 0, 0, 0, 0, jst)
-	endTime := time.Date(year, month, day-1, 23, 59, 59, 0, jst)
+	t := newTimeWithZone()
+	startTime := t.beginningOfDay()
+	endTime := t.endOfDay()
 
 	dimensions := []*cloudwatch.Dimension{
 		buildDimension("Currency", "USD"),
