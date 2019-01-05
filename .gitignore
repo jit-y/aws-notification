@@ -3,3 +3,4 @@
 /.serverless/
 /secret/*
 !/secret/.gitkeep
+/tmp/

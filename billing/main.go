@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"time"
 
@@ -9,10 +10,18 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
+
+	"gopkg.in/yaml.v2"
 )
+
+type serviceNames []string
 
 type timeWithZone struct {
 	tzone *time.Location
+}
+
+type output struct {
+	metricStatistics cloudwatch.GetMetricStatisticsOutput
 }
 
 func newTimeWithZone() *timeWithZone {
@@ -47,11 +56,44 @@ func main() {
 	lambda.Start(handler)
 }
 
-func handler(ctx context.Context) (string, error) {
+func handler(ctx context.Context) ([]string, error) {
 	cfg := buildAWSConfig()
 	s := session.New()
 	cw := cloudwatch.New(s, cfg)
 
+	inputs, err := buildInputs()
+	if err != nil {
+		return nil, err
+	}
+	outputs := make([]string, len(inputs))
+
+	for _, input := range inputs {
+		output, err := cw.GetMetricStatistics(input)
+		if err != nil {
+			return nil, err
+		}
+
+		outputs = append(outputs, output.GoString())
+	}
+
+	return outputs, err
+}
+
+func buildInputs() ([]*cloudwatch.GetMetricStatisticsInput, error) {
+	f, err := os.Open("serviceName.yml")
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := ioutil.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	var names serviceNames
+	err = yaml.Unmarshal(data, &names)
+
+	inputs := make([]*cloudwatch.GetMetricStatisticsInput, len(names) + 1)
 	t := newTimeWithZone()
 	startTime := t.beginningOfDay()
 	endTime := t.endOfDay()
@@ -70,12 +112,26 @@ func handler(ctx context.Context) (string, error) {
 	input.SetPeriod(86400)
 	input.SetStatistics(statistics)
 
-	output, err := cw.GetMetricStatistics(&input)
-	if err != nil {
-		return "", err
+	inputs = append(inputs, &input)
+
+	for _, serviceName := range names {
+		input := cloudwatch.GetMetricStatisticsInput{}
+		dimensions := []*cloudwatch.Dimension{
+			buildDimension("Currency", "USD"),
+			buildDimension("ServiceName", serviceName),
+		}
+		input.SetDimensions(dimensions)
+		input.SetStartTime(startTime)
+		input.SetEndTime(endTime)
+		input.SetMetricName("EstimatedCharges")
+		input.SetNamespace("AWS/Billing")
+		input.SetPeriod(86400)
+		input.SetStatistics(statistics)
+
+		inputs = append(inputs, &input)
 	}
 
-	return output.GoString(), err
+	return inputs, nil
 }
 
 func buildAWSConfig() *aws.Config {

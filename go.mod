@@ -7,5 +7,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.2.2 // indirect
 	golang.org/x/net v0.0.0-20181220203305-927f97764cc3 // indirect
-	golang.org/x/text v0.3.0 // indirect
+	google.golang.org/genproto v0.0.0-20181221175505-bd9b4fb69e2f // indirect
+	gopkg.in/yaml.v2 v2.2.2
 )

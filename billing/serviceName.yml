@@ -1,0 +1,6 @@
+- AmazonEC2
+- AmazonRoute53
+- AmazonECR
+- AWSLambda
+- AmazonS3
+- AmazonCloudFront
