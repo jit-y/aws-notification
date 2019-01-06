@@ -21,7 +21,16 @@ type timeWithZone struct {
 }
 
 type output struct {
-	metricStatistics cloudwatch.GetMetricStatisticsOutput
+	total *cloudwatch.GetMetricStatisticsOutput
+	services []*cloudwatch.GetMetricStatisticsOutput
+}
+
+func (o *output) All() []*cloudwatch.GetMetricStatisticsOutput {
+	outputs := make([]*cloudwatch.GetMetricStatisticsOutput, len(o.services) + 1)
+	outputs = append(outputs, o.total)
+	outputs = append(outputs, o.services...)
+
+	return outputs
 }
 
 func newTimeWithZone() *timeWithZone {
