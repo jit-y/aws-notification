@@ -21,17 +21,15 @@ type timeWithZone struct {
 	tzone *time.Location
 }
 
-type output struct {
-	total *cloudwatch.GetMetricStatisticsOutput
-	services []*cloudwatch.GetMetricStatisticsOutput
+type statisticsInput struct {
+	name string
+	input *cloudwatch.GetMetricStatisticsInput
 }
 
-func (o *output) All() []*cloudwatch.GetMetricStatisticsOutput {
-	outputs := make([]*cloudwatch.GetMetricStatisticsOutput, 0, len(o.services) + 1)
-	outputs = append(outputs, o.total)
-	outputs = append(outputs, o.services...)
-
-	return outputs
+type statisticsOutput struct {
+	name string
+	// output *cloudwatch.GetMetricStatisticsOutput
+	output string
 }
 
 func newTimeWithZone() *timeWithZone {
@@ -66,7 +64,7 @@ func main() {
 	lambda.Start(handler)
 }
 
-func handler(ctx context.Context) ([]string, error) {
+func handler(ctx context.Context) ([]*statisticsOutput, error) {
 	cfg := buildAWSConfig()
 	s := session.New()
 	cw := cloudwatch.New(s, cfg)
@@ -75,21 +73,21 @@ func handler(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	outputs := make([]string, len(inputs))
+	outputs := make([]*statisticsOutput, len(inputs))
 
 	for i, input := range inputs {
-		output, err := cw.GetMetricStatistics(input)
+		output, err := cw.GetMetricStatistics(input.input)
 		if err != nil {
 			return nil, err
 		}
 
-		outputs[i] = output.GoString()
+		outputs[i] = &statisticsOutput{output: output.GoString(), name: input.name}
 	}
 
 	return outputs, err
 }
 
-func buildInputs() ([]*cloudwatch.GetMetricStatisticsInput, error) {
+func buildInputs() ([]*statisticsInput, error) {
 	f, err := config.Assets.Open("/billing/servicename.yml")
 	if err != nil {
 		return nil, err
@@ -103,7 +101,7 @@ func buildInputs() ([]*cloudwatch.GetMetricStatisticsInput, error) {
 	var names serviceNames
 	err = yaml.Unmarshal(data, &names)
 
-	inputs := make([]*cloudwatch.GetMetricStatisticsInput, len(names) + 1)
+	inputs := make([]*statisticsInput, len(names) + 1)
 	t := newTimeWithZone()
 	startTime := t.beginningOfDay()
 	endTime := t.endOfDay()
@@ -122,7 +120,8 @@ func buildInputs() ([]*cloudwatch.GetMetricStatisticsInput, error) {
 	input.SetPeriod(86400)
 	input.SetStatistics(statistics)
 
-	inputs[0] = &input
+	inputs[0] = &statisticsInput{name: "Total", input: &input}
+
 
 	for i, serviceName := range names {
 		input := cloudwatch.GetMetricStatisticsInput{}
@@ -138,7 +137,7 @@ func buildInputs() ([]*cloudwatch.GetMetricStatisticsInput, error) {
 		input.SetPeriod(86400)
 		input.SetStatistics(statistics)
 
-		inputs[i+1] = &input
+		inputs[i+1] = &statisticsInput{name: serviceName, input: &input}
 	}
 
 	return inputs, nil
