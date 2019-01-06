@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 
 	"gopkg.in/yaml.v2"
+	config "github.com/jit-y/aws-notification/config/billing"
 )
 
 type serviceNames []string
@@ -26,7 +27,7 @@ type output struct {
 }
 
 func (o *output) All() []*cloudwatch.GetMetricStatisticsOutput {
-	outputs := make([]*cloudwatch.GetMetricStatisticsOutput, len(o.services) + 1)
+	outputs := make([]*cloudwatch.GetMetricStatisticsOutput, 0, len(o.services) + 1)
 	outputs = append(outputs, o.total)
 	outputs = append(outputs, o.services...)
 
@@ -76,20 +77,20 @@ func handler(ctx context.Context) ([]string, error) {
 	}
 	outputs := make([]string, len(inputs))
 
-	for _, input := range inputs {
+	for i, input := range inputs {
 		output, err := cw.GetMetricStatistics(input)
 		if err != nil {
 			return nil, err
 		}
 
-		outputs = append(outputs, output.GoString())
+		outputs[i] = output.GoString()
 	}
 
 	return outputs, err
 }
 
 func buildInputs() ([]*cloudwatch.GetMetricStatisticsInput, error) {
-	f, err := os.Open("serviceName.yml")
+	f, err := config.Assets.Open("/billing/servicename.yml")
 	if err != nil {
 		return nil, err
 	}
@@ -121,9 +122,9 @@ func buildInputs() ([]*cloudwatch.GetMetricStatisticsInput, error) {
 	input.SetPeriod(86400)
 	input.SetStatistics(statistics)
 
-	inputs = append(inputs, &input)
+	inputs[0] = &input
 
-	for _, serviceName := range names {
+	for i, serviceName := range names {
 		input := cloudwatch.GetMetricStatisticsInput{}
 		dimensions := []*cloudwatch.Dimension{
 			buildDimension("Currency", "USD"),
@@ -137,7 +138,7 @@ func buildInputs() ([]*cloudwatch.GetMetricStatisticsInput, error) {
 		input.SetPeriod(86400)
 		input.SetStatistics(statistics)
 
-		inputs = append(inputs, &input)
+		inputs[i+1] = &input
 	}
 
 	return inputs, nil
@@ -163,8 +164,8 @@ func buildDimension(name, value string) *cloudwatch.Dimension {
 
 func buildStatistics(statistics ...string) []*string {
 	arr := make([]*string, len(statistics))
-	for _, v := range statistics {
-		arr = append(arr, &v)
+	for i, v := range statistics {
+		arr[i] = &v
 	}
 
 	return arr
