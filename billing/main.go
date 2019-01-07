@@ -1,10 +1,15 @@
 package main
 
 import (
+	"strings"
+	"net/http"
+	"fmt"
 	"context"
 	"io/ioutil"
 	"os"
 	"time"
+	"encoding/json"
+	"errors"
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
@@ -28,8 +33,7 @@ type statisticsInput struct {
 
 type statisticsOutput struct {
 	name string
-	// output *cloudwatch.GetMetricStatisticsOutput
-	output string
+	output *cloudwatch.GetMetricStatisticsOutput
 }
 
 func newTimeWithZone() *timeWithZone {
@@ -64,30 +68,51 @@ func main() {
 	lambda.Start(handler)
 }
 
-func handler(ctx context.Context) ([]*statisticsOutput, error) {
+func handler(ctx context.Context) (string, error) {
 	cfg := buildAWSConfig()
 	s := session.New()
 	cw := cloudwatch.New(s, cfg)
 
 	inputs, err := buildInputs()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	outputs := make([]*statisticsOutput, len(inputs))
+	outputs := make([]statisticsOutput, len(inputs))
 
 	for i, input := range inputs {
 		output, err := cw.GetMetricStatistics(input.input)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 
-		outputs[i] = &statisticsOutput{output: output.GoString(), name: input.name}
+		outputs[i] = statisticsOutput{output: output, name: input.name}
 	}
 
-	return outputs, err
+	attachment := buildAttatchment(outputs)
+	reqBody, err := buildRequestBody(attachment)
+	if err != nil {
+		return "", err
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+	bodyReader := strings.NewReader(string(body))
+
+	slackURL := os.Getenv("SLACK_WEBHOOK_URL")
+	if slackURL == "" {
+		return "", errors.New("SLACK_WEBHOOK_URL is not defined")
+	}
+	res, err := http.Post(slackURL, "application/json", bodyReader)
+	if err != nil {
+		return "", err
+	}
+	fmt.Println(res)
+
+	return "ok", err
 }
 
-func buildInputs() ([]*statisticsInput, error) {
+func buildInputs() ([]statisticsInput, error) {
 	f, err := config.Assets.Open("/billing/servicename.yml")
 	if err != nil {
 		return nil, err
@@ -101,7 +126,7 @@ func buildInputs() ([]*statisticsInput, error) {
 	var names serviceNames
 	err = yaml.Unmarshal(data, &names)
 
-	inputs := make([]*statisticsInput, len(names) + 1)
+	inputs := make([]statisticsInput, len(names) + 1)
 	t := newTimeWithZone()
 	startTime := t.beginningOfDay()
 	endTime := t.endOfDay()
@@ -120,8 +145,7 @@ func buildInputs() ([]*statisticsInput, error) {
 	input.SetPeriod(86400)
 	input.SetStatistics(statistics)
 
-	inputs[0] = &statisticsInput{name: "Total", input: &input}
-
+	inputs[0] = statisticsInput{name: "Total", input: &input}
 
 	for i, serviceName := range names {
 		input := cloudwatch.GetMetricStatisticsInput{}
@@ -137,7 +161,7 @@ func buildInputs() ([]*statisticsInput, error) {
 		input.SetPeriod(86400)
 		input.SetStatistics(statistics)
 
-		inputs[i+1] = &statisticsInput{name: serviceName, input: &input}
+		inputs[i+1] = statisticsInput{name: serviceName, input: &input}
 	}
 
 	return inputs, nil
@@ -168,4 +192,58 @@ func buildStatistics(statistics ...string) []*string {
 	}
 
 	return arr
+}
+
+type reqAttachment struct {
+	Fallback string `json:"fallback"`
+	Pretext string	`json:"pretext"`
+	Color string `json:"color"`
+	Fields []*reqField `json:"fields"`
+}
+
+type reqField struct {
+	Title string `json:"title"`
+	Value string `json:"value"`
+	Short bool `json:"short"`
+}
+
+func buildAttatchment(statisticsOutputs []statisticsOutput) *reqAttachment {
+	attachment := reqAttachment{Fallback: "oops", Pretext: "", Color: "good"}
+	fields := make([]*reqField, len(statisticsOutputs))
+	for i, so := range statisticsOutputs {
+		var point float64
+		for _, d := range so.output.Datapoints {
+			avg := d.Average
+			if avg != nil {
+				point += *avg
+			}
+		}
+		fields[i] = &reqField{
+			Title: so.name,
+			Value: fmt.Sprintf("%f USD", point),
+			Short: true,
+		}
+	}
+	attachment.Fields = fields
+
+	return &attachment
+}
+
+type reqBody struct {
+	Channel string `json:"channel"`
+	Attachments []*reqAttachment `json:"attachments"`
+}
+
+func buildRequestBody(attachments ...*reqAttachment) (*reqBody, error) {
+	channelName := os.Getenv("SLACK_CHANNEL_NAME")
+	if channelName == "" {
+		return nil, errors.New("SLACK_CHANNEL_NAME is not defined")
+	}
+
+	body := reqBody{
+		Channel: channelName,
+		Attachments: attachments,
+	}
+
+	return &body, nil
 }
